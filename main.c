@@ -70,7 +70,7 @@ typedef struct {
 } server_params_t;
 
 
-// (NAV_PLAN - Simplificada)
+// (NAV_PLAN - Simplificada) ---> é aperiódica pois só acontece quandomuda algo no ambiente, ou piloto
 
 void nav_plan_job(void *arg) {
     //trava a cpu propositalmente por 2.5ms para simular o esforço computacional
@@ -137,8 +137,9 @@ void *server_thread(void *arg) {
             consumed_ns += dt;
 
             // Se o orçamento estourou, para forçadamente
+            //exemplo: Termina o evento 397, o priximo item da lista, vai para a fila
             if (consumed_ns >= Cs) {
-                printf("!!! Orçamento Esgotado (%ld > %ld) - Adulando resto da fila !!!\n", consumed_ns, Cs);
+                printf("!!! Orçamento Esgotado (%ld > %ld) - Adia resto da fila !\n", consumed_ns, Cs);
                 break;
             }
         }
@@ -153,19 +154,27 @@ end_of_service:
 
 // 5. GERADOR DE CARGA (Simula Interrupções)
 
+// Função que encapsula a criação do job (conforme PDF)
+void requisicao_aperiodica(int id) {
+    
+    int *p = (int*)malloc(sizeof(int));
+    *p = id; 
+    
+    // Chama a função de enfileirar
+    enqueue_job(nav_plan_job, p);
+}
+
+// Thread Gerador
 void *gerador_aperiodico(void *arg) {
     int id_counter = 0;
     srand(time(NULL));
 
     while(1) {
-        // Simula o usuário tocando na tela aleatoriamente (entre 20ms e 100ms)
+        // Espera aleatória
         usleep(20000 + (rand() % 80000)); 
         
-        int *p = malloc(sizeof(int));
-        *p = ++id_counter;
-        
-        //printf("[Gerador] Criando requisicao NAV %d\n", *p);
-        enqueue_job(nav_plan_job, p);
+        // Chama a função auxiliar corrigida
+        requisicao_aperiodica(++id_counter);
     }
     return NULL;
 }
@@ -199,10 +208,10 @@ int main() {
     }
     pthread_attr_destroy(&attr);
 
-    // Cria Thread do Gerador (Normal, simula o mundo externo)
+    // Cria Thread do Gerador (Normal)
     pthread_create(&th_gen, NULL, gerador_aperiodico, NULL);
 
-    // Aguarda (na prática roda para sempre)
+    // Aguarda threads
     pthread_join(th_server, NULL);
     pthread_join(th_gen, NULL);
 
